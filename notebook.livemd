@@ -91,3 +91,55 @@ player_skills[breccan]
 |> Nx.Defn.Kernel./(position_skills[stopper] |> Nx.Defn.Kernel.*(max_skill) |> Nx.sum())
 |> Nx.to_scalar()
 ```
+
+```elixir
+stopper_ratings = Nx.multiply(player_skills, position_skills[stopper])
+player_ratings_for_stopper = Nx.sum(stopper_ratings, axes: [1])
+```
+
+```elixir
+# Nx.broadcast(position_skills[stopper], {6, 13}, axes: [0])
+# Nx.transpose(player_skills)
+unsummed_stopper_ratings =
+  Nx.multiply(
+    Nx.transpose(player_skills),
+    Nx.broadcast(position_skills[stopper], {6, 13}, axes: [0])
+  )
+
+stopper_ratings = Nx.sum(unsummed_stopper_ratings, axes: [0])
+stopper_max_score = position_skills[stopper] |> Nx.Defn.Kernel.*(max_skill) |> Nx.sum()
+normalized_stopper_ratings = Nx.divide(stopper_ratings, stopper_max_score)
+```
+
+```elixir
+unsummed_goalie_ratings =
+  Nx.multiply(
+    Nx.transpose(player_skills),
+    Nx.broadcast(position_skills[goalie], {6, 13}, axes: [0])
+  )
+
+goalie_ratings = Nx.sum(unsummed_goalie_ratings, axes: [0])
+goalie_max_score = position_skills[goalie] |> Nx.Defn.Kernel.*(max_skill) |> Nx.sum()
+normalized_goalie_ratings = Nx.divide(goalie_ratings, goalie_max_score)
+```
+
+```elixir
+player_ratings =
+  0..5
+  |> Enum.to_list()
+  |> Enum.map(fn position ->
+    unsummed_ratings =
+      Nx.multiply(
+        Nx.transpose(player_skills),
+        Nx.broadcast(position_skills[position], {6, 13}, axes: [0])
+      )
+
+    ratings = Nx.sum(unsummed_ratings, axes: [0])
+    max_score = position_skills[position] |> Nx.Defn.Kernel.*(max_skill) |> Nx.sum()
+    Nx.divide(ratings, max_score) |> Nx.to_flat_list()
+  end)
+  |> Nx.tensor(names: [:position, :player])
+  |> Nx.transpose()
+
+i(player_ratings)
+```
