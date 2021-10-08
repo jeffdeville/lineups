@@ -147,7 +147,7 @@ defmodule Lineups.Scoring do
 
   def get_player_position_score(player, @fwd, prev_positions) do
     (
-      offense(player) + awareness(player), endurance(player) * 0.5,  + speed(player) + desire(player, @fwd, prev_positions)
+      offense(player) + awareness(player) + endurance(player) * 0.5  + speed(player) + desire(player, @fwd, prev_positions)
     ) / (
       @max_offense + @max_awareness + @max_desire
     ) |> Float.round(3)
