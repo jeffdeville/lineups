@@ -1,6 +1,6 @@
 # Nx Testing
 
-## Section
+## Setup
 
 ```elixir
 Mix.install([
@@ -13,30 +13,23 @@ import IEx.Helpers
 import Nx.Defn
 ```
 
+## Scoring
+
 ```elixir
 player_skills = %{
-  Breccan: [0, 5, 4, 5, 4, 5],
-  Cameron: [5, 3, 3, 3, 3, 3],
-  Evan: [4, 4, 4, 2, 2, 4],
-  Harry: [3, 4, 3, 4, 3, 2],
-  Isaiah: [0, 4, 3, 4, 4, 3],
-  Jack: [4, 5, 4, 3, 3, 4],
-  Linsana: [0, 5, 5, 5, 5, 5],
-  Lusaine: [0, 5, 5, 5, 5, 5],
-  Paco: [0, 3, 3, 5, 3, 3],
-  Richard: [0, 2, 1, 2, 1, 1],
-  Ryan: [0, 2, 2, 2, 1, 3],
-  SamK: [0, 3, 4, 4, 4, 3],
-  SamS: [0, 4, 4, 4, 5, 3]
-}
-
-position_skill_weightings = %{
-  goalie: [1, 0, 0, 0, 0, 0],
-  def: [0, 1, 0, 0, 0, 0],
-  stopper: [0, 1, 0.3, 1, 1, 1],
-  def_mid: [0, 1, 0.6, 1, 0.7, 0.4],
-  off_mid: [0, 0.4, 1, 1, 1, 0.9],
-  fwd: [0, 0, 1, 0.5, 1, 1]
+  Breccan: [0, 5, 4, 5, 4, 5, 0],
+  Cameron: [5, 3, 3, 3, 3, 3, 0],
+  Evan: [4, 4, 4, 2, 2, 4, 0],
+  Harry: [3, 4, 3, 4, 3, 2, 0],
+  Isaiah: [0, 4, 3, 4, 4, 3, 0],
+  Jack: [4, 5, 4, 3, 3, 4, 0],
+  Linsana: [0, 5, 5, 5, 5, 5, 0],
+  Lusaine: [0, 5, 5, 5, 5, 5, 0],
+  Paco: [0, 3, 3, 5, 3, 3, 0],
+  Richard: [0, 2, 1, 2, 1, 1, 0],
+  Ryan: [0, 2, 2, 2, 1, 3, 0],
+  SamK: [0, 3, 4, 4, 4, 3, 0],
+  SamS: [0, 4, 4, 4, 5, 3, 0]
 }
 
 breccan = 0
@@ -52,94 +45,136 @@ richard = 9
 ryan = 10
 samk = 11
 sams = 12
-
-goalie = 0
-defense = 1
-stopper = 2
-def_mid = 3
-off_mid = 4
-fwd = 5
 ```
 
 ```elixir
-player_skills = Nx.tensor(Map.values(player_skills))
-max_skill = Nx.broadcast(5, {1, 6})
+player_skills = Nx.tensor(Map.values(player_skills), names: [:player, :skills])
 
+# goalie
+# defense
+# offense
+# speed
+# endurance
+# awareness
+# not_here
 position_skills =
-  Nx.tensor([
-    # goalie
-    [1, 0, 0, 0, 0, 0],
-    # def
-    [0, 1, 0, 0, 0, 0],
-    # stopper
-    [0, 1, 0.3, 1, 1, 1],
-    # def_mid
-    [0, 1, 0.6, 1, 0.7, 0.4],
-    # off_mid
-    [0, 0.4, 1, 1, 1, 0.9],
-    # fwd
-    [0, 0, 1, 0.5, 1, 1]
-  ])
-
-[player_skills, position_skills, max_skill]
-```
-
-```elixir
-player_skills[breccan]
-|> Nx.Defn.Kernel.*(position_skills[stopper])
-|> Nx.sum()
-|> Nx.Defn.Kernel./(position_skills[stopper] |> Nx.Defn.Kernel.*(max_skill) |> Nx.sum())
-|> Nx.to_scalar()
-```
-
-```elixir
-stopper_ratings = Nx.multiply(player_skills, position_skills[stopper])
-player_ratings_for_stopper = Nx.sum(stopper_ratings, axes: [1])
-```
-
-```elixir
-# Nx.broadcast(position_skills[stopper], {6, 13}, axes: [0])
-# Nx.transpose(player_skills)
-unsummed_stopper_ratings =
-  Nx.multiply(
-    Nx.transpose(player_skills),
-    Nx.broadcast(position_skills[stopper], {6, 13}, axes: [0])
+  Nx.tensor(
+    [
+      # goalie
+      [1, 0, 0, 0, 0, 0, 0],
+      # def1
+      [0, 1, 0, 0, 0, 0, 0],
+      # def2
+      [0, 1, 0, 0, 0, 0, 0],
+      # stopper
+      [0, 1, 0.3, 1, 1, 1, 0],
+      # def_mid
+      [0, 1, 0.6, 1, 0.7, 0.4, 0],
+      # off_mid
+      [0, 0.4, 1, 1, 1, 0.9, 0],
+      # fwd
+      [0, 0, 1, 0.5, 1, 1, 0],
+      # sub1
+      [0, 0, 0, 0, 0, 0, 1],
+      # sub2
+      [0, 0, 0, 0, 0, 0, 1],
+      # sub3
+      [0, 0, 0, 0, 0, 0, 1],
+      # sub4
+      [0, 0, 0, 0, 0, 0, 1],
+      # sub5
+      [0, 0, 0, 0, 0, 0, 1],
+      # sub6
+      [0, 0, 0, 0, 0, 0, 1]
+    ],
+    names: [:position, :skill_weighting]
   )
 
-stopper_ratings = Nx.sum(unsummed_stopper_ratings, axes: [0])
-stopper_max_score = position_skills[stopper] |> Nx.Defn.Kernel.*(max_skill) |> Nx.sum()
-normalized_stopper_ratings = Nx.divide(stopper_ratings, stopper_max_score)
-```
-
-```elixir
-unsummed_goalie_ratings =
-  Nx.multiply(
-    Nx.transpose(player_skills),
-    Nx.broadcast(position_skills[goalie], {6, 13}, axes: [0])
-  )
-
-goalie_ratings = Nx.sum(unsummed_goalie_ratings, axes: [0])
-goalie_max_score = position_skills[goalie] |> Nx.Defn.Kernel.*(max_skill) |> Nx.sum()
-normalized_goalie_ratings = Nx.divide(goalie_ratings, goalie_max_score)
+{_, num_skills} = Nx.shape(position_skills)
+max_skill = Nx.broadcast(5, {1, num_skills})
 ```
 
 ```elixir
 player_ratings =
-  0..5
+  0..12
   |> Enum.to_list()
   |> Enum.map(fn position ->
-    unsummed_ratings =
-      Nx.multiply(
-        Nx.transpose(player_skills),
-        Nx.broadcast(position_skills[position], {6, 13}, axes: [0])
-      )
-
-    ratings = Nx.sum(unsummed_ratings, axes: [0])
-    max_score = position_skills[position] |> Nx.Defn.Kernel.*(max_skill) |> Nx.sum()
-    Nx.divide(ratings, max_score) |> Nx.to_flat_list()
+    player_skills
+    |> Nx.transpose()
+    |> Nx.multiply(Nx.broadcast(position_skills[position], {7, 13}, axes: [0]))
+    |> Nx.sum(axes: [0])
+    |> Nx.divide(position_skills[position] |> Nx.multiply(max_skill) |> Nx.sum())
   end)
-  |> Nx.tensor(names: [:position, :player])
+  |> Nx.stack()
   |> Nx.transpose()
 
-i(player_ratings)
+IO.inspect(player_ratings)
+```
+
+## Searching For Lineups
+
+I think it'll be ideal if I can start with a valid lineup, and then let the algorithm try and improve it from there.
+
+I think the scoring algorithm will need to either score all lineups concurrently, or will have to score them based on substitutions. So if it's substitutions, I guess I'd need to ensure I didn't have players that were _too_ weak. But that would be an indirect measurement. I think the scoring algorithm is fine. I just need to figure out how to represent the search space, and figure out how to tweak it. I guess it'll just be a tensor with players (13), positions (7), periods (8)
+
+How will I alter these values to implement search? If I start with an invalid base case, it'll be hard to get started. But I guess everything is valid, the score will just be low. But it needs to not be totally 0, so that it can go up and down.
+
+I'm creating a vector where every kid has a position "out" is a position.
+
+I'll have to work out how to deal with kids who just don't show then.
+
+I guess that you solve that by making sure that if they're not there, the algorithm will want to place them on the "out" position, and leave them there.
+
+```elixir
+game_lineup =
+  0..7
+  |> Enum.to_list()
+  |> Enum.map(fn _ -> Nx.eye({13, 13}) end)
+  |> Nx.stack()
+```
+
+## How to mutate and search
+
+1. Randomly choose 1 of the 8 lineups
+2. Randomly choose 2 rows `(Enum.take_random(0..13, 2))`
+3. Exchange their 1's `ErlangSwap.swap`
+4. Score the new lineups
+5. If the new lineup is stronger, keep it. Otherwise discard it.
+
+Swap is used to swap indices in a row (Step 3)
+
+```elixir
+defmodule ErlangSwap do
+  def swap(a, i1, i2) do
+    a = :array.from_list(a)
+
+    v1 = :array.get(i1, a)
+    v2 = :array.get(i2, a)
+
+    a = :array.set(i1, v2, a)
+    a = :array.set(i2, v1, a)
+
+    :array.to_list(a)
+  end
+end
+
+0..12 |> Enum.to_list() |> ErlangSwap.swap(4, 7) |> ErlangSwap.swap(1, 2)
+```
+
+```elixir
+period = Enum.random(0..7)
+players = Enum.take_random(0..13, 2)
+{swap1, swap2} = {4, 7}
+
+new_lineup = 0..13 |> Enum.to_list() |> ErlangSwap.swap(swap1, swap2)
+# p1 = game_lineup[period][4]
+# p2 = game_lineup[period][7]
+# [p1, p2]
+# IO.inspect(game_lineup[period])
+# Nx.put_slice(game_lineup[period], [4, 0], p2)
+# Nx.put_slice(game_lineup[period], [7, 0], p1)
+# NX.take(game_lineup[period]
+old_tensor = game_lineup[period]
+new_tensor = Nx.take(game_lineup[period], Nx.tensor([0, 1, 2, 3, 7, 5, 6, 4]))
+# IO.inspect([old_tensor, new_tensor], limit: :infinity)
 ```
