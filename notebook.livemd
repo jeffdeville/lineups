@@ -15,6 +15,12 @@ import Nx.Defn
 
 ## Scoring
 
+Goalie is the only position where I do NOT want to change keepers at each period. Need to figure out how to work on that.
+
+Also, I don't know how to make Cameron do it half the game, and Evan / Harry to split the other parts.
+
+I just chose to leave in a weaker defense because I had a really solid offense in. Not sure how to deal with that in the algorithm. This lineup would be punished for sure.
+
 ```elixir
 player_skills = %{
   Breccan: [0, 5, 4, 5, 4, 5, 0],
@@ -131,6 +137,14 @@ game_lineup =
   |> Enum.to_list()
   |> Enum.map(fn _ -> Nx.eye({13, 13}) end)
   |> Nx.stack()
+
+newT = Nx.iota({13, 13})
+# IO.inspect(newT)
+update = Nx.stack([game_lineup[0..2], game_lineup[1], newT, game_lineup[3]])
+# IO.inspect(Nx.stack([game_lineup[0], game_lineup[1]]), limit: :infinity)
+IO.inspect(update, limit: :infinity)
+# IO.inspect(game_lineup[0..3], limit: :infinity)
+""
 ```
 
 ## How to mutate and search
@@ -170,11 +184,12 @@ new_lineup = 0..13 |> Enum.to_list() |> ErlangSwap.swap(swap1, swap2)
 # p1 = game_lineup[period][4]
 # p2 = game_lineup[period][7]
 # [p1, p2]
+F
 # IO.inspect(game_lineup[period])
 # Nx.put_slice(game_lineup[period], [4, 0], p2)
 # Nx.put_slice(game_lineup[period], [7, 0], p1)
 # NX.take(game_lineup[period]
 old_tensor = game_lineup[period]
 new_tensor = Nx.take(game_lineup[period], Nx.tensor([0, 1, 2, 3, 7, 5, 6, 4]))
-# IO.inspect([old_tensor, new_tensor], limit: :infinity)
+IO.inspect([old_tensor, new_tensor], limit: :infinity)
 ```
