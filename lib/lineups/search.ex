@@ -38,8 +38,8 @@ defmodule Lineups.Search do
     names: [:position, :skill_weighting]
   )
 
-  # Store the model or something here? - I should send in the list of kids
-  # who are playing here, so that after that, it's all just figured out and
+  # TODO: I should send in the list of kids
+  # who are playing here, so that I can cut down the number of positions and whatnot that are needed. (Remove positions from the end of the list, and just assume that if the number of real positions is greater than the number of players, that you're in an invalid state anyway)
   # unneeded data is dropped
   # @spec init(map(string, list(number)), any) :: nil
   def init(position_weightings, num_periods) do
