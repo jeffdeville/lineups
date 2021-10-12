@@ -96,8 +96,7 @@ position_skills =
     names: [:position, :skill_weighting]
   )
 
-{_, num_skills} = Nx.shape(position_skills)
-max_skill = Nx.broadcast(5, {1, num_skills})
+p
 ```
 
 ```elixir
@@ -135,16 +134,16 @@ I guess that you solve that by making sure that if they're not there, the algori
 game_lineup =
   0..7
   |> Enum.to_list()
-  |> Enum.map(fn _ -> Nx.eye({13, 13}) end)
+  |> Enum.map(fn _ -> Nx.eye({13, 13}, type: {:f, 32}) end)
   |> Nx.stack()
 
-newT = Nx.iota({13, 13})
+# newT = Nx.iota({13, 13})
 # IO.inspect(newT)
-update = Nx.stack([game_lineup[0..2], game_lineup[1], newT, game_lineup[3]])
+# update = Nx.stack([game_lineup[0..2], game_lineup[1], newT, game_lineup[3]])
 # IO.inspect(Nx.stack([game_lineup[0], game_lineup[1]]), limit: :infinity)
-IO.inspect(update, limit: :infinity)
+# IO.inspect(update, limit: :infinity)
 # IO.inspect(game_lineup[0..3], limit: :infinity)
-""
+# ""
 ```
 
 ## How to mutate and search
@@ -192,4 +191,49 @@ F
 old_tensor = game_lineup[period]
 new_tensor = Nx.take(game_lineup[period], Nx.tensor([0, 1, 2, 3, 7, 5, 6, 4]))
 IO.inspect([old_tensor, new_tensor], limit: :infinity)
+```
+
+```elixir
+Nx.broadcast(player_ratings, game_lineup)
+a = Nx.multiply(player_ratings, game_lineup[0]) |> Nx.sum()
+b = Nx.multiply(player_ratings, game_lineup[1]) |> Nx.sum()
+c = Nx.multiply(player_ratings, game_lineup[2]) |> Nx.sum()
+Nx.multiply(Nx.broadcast(player_ratings, game_lineup), game_lineup) |> Nx.sum()
+# {a, b, c}
+```
+
+## Tweaking
+
+```elixir
+strong_lineup =
+  Nx.tensor([
+    [
+      # Breccan
+      [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      # Cameron
+      [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      # Evan
+      [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      # Harry
+      [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+      # Isaiah
+      [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+      # Jack
+      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      # Linsana
+      [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
+      # Lusaine
+      [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+      # Paco
+      [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0],
+      # Richard
+      [0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+      # Ryan
+      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
+      # SamK
+      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
+      # SamS
+      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
+    ]
+  ])
 ```
