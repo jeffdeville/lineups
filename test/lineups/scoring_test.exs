@@ -16,21 +16,26 @@ defmodule Lineups.ScoringTest do
     end
 
     test "incomplete lineups score 0" do
-      assert Scoring.score([[:Breccan, :Harry, :Isaiah ]]) == 0
+      assert Scoring.score([[:Breccan, :Harry, :Isaiah]]) == 0
     end
 
     test "any incomplete lineup scores 0" do
-      assert Scoring.score([[:Breccan, :Harry, :Isaiah, :Cameron, :Paco, :Ryan, :Evan], [:Breccan, :Harry]]) == 0
+      assert Scoring.score([
+               [:Breccan, :Harry, :Isaiah, :Cameron, :Paco, :Ryan, :Evan],
+               [:Breccan, :Harry]
+             ]) == 0
     end
 
     test "lineups with duplicate players scores 0" do
-      assert Scoring.score([[:Breccan, :Breccan, :Breccan, :Breccan, :Breccan, :Breccan, :Breccan]]) == 0
+      assert Scoring.score([
+               [:Breccan, :Breccan, :Breccan, :Breccan, :Breccan, :Breccan, :Breccan]
+             ]) == 0
     end
 
     test "lineups with invalid players scores 0" do
-      assert Scoring.score([[:ThisIsNotAPlayer, :Harry, :Isaiah, :Cameron, :Paco, :Ryan, :Evan]]) == 0
+      assert Scoring.score([[:ThisIsNotAPlayer, :Harry, :Isaiah, :Cameron, :Paco, :Ryan, :Evan]]) ==
+               0
     end
-
   end
 
   describe "valid lineups generate scores" do
@@ -41,8 +46,8 @@ defmodule Lineups.ScoringTest do
     test "lineup scores are averaged, so duplicate lineups should have the same score" do
       lineup1 = [:Breccan, :Harry, :Isaiah, :Cameron, :Paco, :Ryan, :Evan]
       lineup2 = [:Cameron, :Evan, :Richard, :Breccan, :SamK, :Lusaine, :Linsana]
-      assert Scoring.score([ lineup1, lineup1 ]) == Scoring.score([ lineup1])
-      assert Scoring.score([ lineup1, lineup2 ]) == 54.589
+      assert Scoring.score([lineup1, lineup1]) == Scoring.score([lineup1])
+      assert Scoring.score([lineup1, lineup2]) == 54.589
     end
   end
 
@@ -52,7 +57,13 @@ defmodule Lineups.ScoringTest do
       assert Scoring.get_player_position_score(:Cameron, @goalie, []) == 5
       assert Scoring.get_player_position_score(:Cameron, @goalie, [@goalie]) == 5
       assert Scoring.get_player_position_score(:Cameron, @goalie, [@goalie, @goalie]) == 5
-      assert Scoring.get_player_position_score(:Cameron, @goalie, [@goalie, @goalie, @goalie, @goalie]) == 0
+
+      assert Scoring.get_player_position_score(:Cameron, @goalie, [
+               @goalie,
+               @goalie,
+               @goalie,
+               @goalie
+             ]) == 0
     end
   end
 
@@ -96,5 +107,4 @@ defmodule Lineups.ScoringTest do
       assert Scoring.get_player_position_score(:Linsana, @fwd, []) == 0.909
     end
   end
-
 end

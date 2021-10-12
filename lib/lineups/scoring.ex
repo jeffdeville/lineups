@@ -31,7 +31,7 @@ defmodule Lineups.Scoring do
     Richard: [0, 2, 1, 2, 1, 1],
     Ryan: [0, 2, 2, 2, 1, 3],
     SamK: [0, 3, 4, 4, 4, 3],
-    SamS: [0, 4, 4, 4, 5, 3],
+    SamS: [0, 2, 3, 4, 5, 2]
   }
 
   @max_defense 5
@@ -41,9 +41,9 @@ defmodule Lineups.Scoring do
   @max_desire 1
   @max_freshness 5
 
-
   @spec score(list(list(atom()))) :: any
   def score([]), do: 0
+
   def score(lineups) do
     if any_invalid_lineups?(lineups) do
       0
@@ -58,8 +58,8 @@ defmodule Lineups.Scoring do
     # a Lineup is just an list of players, their position inferred by index
     lineup
     |> Stream.with_index(0)
-    |> Enum.map(fn { player, index} -> get_player_position_score(player, index) end)
-    |> Enum.reduce(0, fn score, acc -> acc + score end )
+    |> Enum.map(fn {player, index} -> get_player_position_score(player, index) end)
+    |> Enum.reduce(0, fn score, acc -> acc + score end)
     |> :math.pow(2)
   end
 
@@ -68,17 +68,19 @@ defmodule Lineups.Scoring do
     :math.pow(get_player_position_score(def1, 1) + get_player_position_score(def2, 2), 2)
   end
 
-  defp average_score(total_score, lineups), do: total_score / length(lineups) |> Float.round(3)
+  defp average_score(total_score, lineups), do: (total_score / length(lineups)) |> Float.round(3)
 
   defp any_invalid_lineups?(lineups) do
     lineups
-    |> Enum.any?(fn lineup -> any_duplicate_players_or_incomplete_lineups?(lineup) or any_missing_players?(lineup) end)
+    |> Enum.any?(fn lineup ->
+      any_duplicate_players_or_incomplete_lineups?(lineup) or any_missing_players?(lineup)
+    end)
   end
 
   defp any_missing_players?(lineup) do
     if Enum.any?(lineup, fn player -> !Map.has_key?(@player_skills, player) end) do
-        IO.inspect(lineup, label: "Missing players")
-        true
+      IO.inspect(lineup, label: "Missing players")
+      true
     else
       false
     end
@@ -93,73 +95,75 @@ defmodule Lineups.Scoring do
     end
   end
 
-  def get_player_position_score(player, position), do: get_player_position_score(player, position, [])
+  def get_player_position_score(player, position),
+    do: get_player_position_score(player, position, [])
 
   def get_player_position_score(player, @goalie, prev_positions) do
-    num_times_in_goal_so_far = prev_positions
-    |> Enum.filter(&(&1 == @goalie))
-    |> Kernel.length()
+    num_times_in_goal_so_far =
+      prev_positions
+      |> Enum.filter(&(&1 == @goalie))
+      |> Kernel.length()
+
     if num_times_in_goal_so_far >= 4, do: 0, else: goalie(player)
   end
 
-  def get_player_position_score(player, position, prev_positions) when position == @def1 or position == @def2 do
-    (defense(player) + desire(player, @def, prev_positions)) / (@max_defense + @max_desire) |> Float.round(3)
+  def get_player_position_score(player, position, prev_positions)
+      when position == @def1 or position == @def2 do
+    ((defense(player) + desire(player, @def, prev_positions)) / (@max_defense + @max_desire))
+    |> Float.round(3)
   end
 
   def get_player_position_score(player, @stopper, prev_positions) do
-    (
-      defense(player) +
-      (offense(player) * 0.3) +
-      awareness(player) +
-      speed(player) +
-      desire(player, @stopper, prev_positions) +
-      freshness(player, @stopper, prev_positions)
-    ) / (
-      @max_defense + @max_offense * 0.3 + @max_awareness + @max_speed + @max_desire + @max_freshness
-    ) |> Float.round(3)
+    ((defense(player) +
+        offense(player) * 0.3 +
+        awareness(player) +
+        speed(player) +
+        desire(player, @stopper, prev_positions) +
+        freshness(player, @stopper, prev_positions)) /
+       (@max_defense + @max_offense * 0.3 + @max_awareness + @max_speed + @max_desire +
+          @max_freshness))
+    |> Float.round(3)
   end
 
   def get_player_position_score(player, @def_mid, prev_positions) do
-    (
-      defense(player) +
-      offense(player) * 0.6 +
-      awareness(player) * 0.4 +
-      speed(player) * 0.7 +
-      desire(player, @def_mid, prev_positions) +
-      freshness(player, @def_mid, prev_positions)
-    ) / (
-      @max_defense + @max_offense * 0.6 + @max_awareness * 0.4 + @max_speed * 0.7 + @max_desire + @max_freshness
-    ) |> Float.round(3)
+    ((defense(player) +
+        offense(player) * 0.6 +
+        awareness(player) * 0.4 +
+        speed(player) * 0.7 +
+        desire(player, @def_mid, prev_positions) +
+        freshness(player, @def_mid, prev_positions)) /
+       (@max_defense + @max_offense * 0.6 + @max_awareness * 0.4 + @max_speed * 0.7 + @max_desire +
+          @max_freshness))
+    |> Float.round(3)
   end
 
   def get_player_position_score(player, @off_mid, prev_positions) do
-    (
-      defense(player) * 0.4 +
-      offense(player) +
-      awareness(player) * 0.9 +
-      speed(player) +
-      desire(player, @off_mid, prev_positions) +
-      freshness(player, @def_mid, prev_positions)
-    ) / (
-      @max_defense * 0.4 + @max_offense + @max_awareness * 0.9 + @max_speed + @max_desire + @max_freshness
-    ) |> Float.round(3)
+    ((defense(player) * 0.4 +
+        offense(player) +
+        awareness(player) * 0.9 +
+        speed(player) +
+        desire(player, @off_mid, prev_positions) +
+        freshness(player, @def_mid, prev_positions)) /
+       (@max_defense * 0.4 + @max_offense + @max_awareness * 0.9 + @max_speed + @max_desire +
+          @max_freshness))
+    |> Float.round(3)
   end
 
   def get_player_position_score(player, @fwd, prev_positions) do
-    (
-      offense(player) + awareness(player) + endurance(player) * 0.5  + speed(player) + desire(player, @fwd, prev_positions)
-    ) / (
-      @max_offense + @max_awareness + @max_desire
-    ) |> Float.round(3)
+    ((offense(player) + awareness(player) + endurance(player) * 0.5 + speed(player) +
+        desire(player, @fwd, prev_positions)) / (@max_offense + @max_awareness + @max_desire))
+    |> Float.round(3)
   end
 
   defp desire(:Paco, position, prev_positions) when position == @off_mid or position == @fwd do
-    times_played_offense = prev_positions
-    |> Enum.filter(&(&1 == @off_mid or &1 == @fwd))
-    |> Kernel.length()
+    times_played_offense =
+      prev_positions
+      |> Enum.filter(&(&1 == @off_mid or &1 == @fwd))
+      |> Kernel.length()
 
     if times_played_offense > 2, do: 2, else: 1
   end
+
   defp desire(:Evan, position, _prev_positions) when position in [@def1, @def2], do: 1
   defp desire(_player, _position, _prev_positions), do: 0
 
