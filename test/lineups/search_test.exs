@@ -109,9 +109,9 @@ defmodule Lineups.SearchTest do
     end
 
     test "when num iterations not completed, search" do
-      lineups = Search.init(@player_skills, 1)
+      lineups = Search.init(@player_skills, 2)
       initial_score = Search.score(lineups, @player_skills)
-      new_lineups = Search.search(lineups, initial_score, @player_skills, 10000, 0)
+      new_lineups = Search.search(lineups, initial_score, @player_skills, 50000, 0)
       Search.print(new_lineups)
       assert Search.score(new_lineups, @player_skills) > Search.score(lineups, @player_skills)
       assert false

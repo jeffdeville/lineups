@@ -102,8 +102,8 @@ defmodule Lineups.Search do
     # IO.inspect({current_lineups_score, new_score}, label: "\tscores")
     {best_lineup, best_score} =
       if new_score > current_lineups_score do
-        IO.inspect({current_lineups_score, new_score}, label: "Current, New Score")
-        print(new_state)
+        # IO.inspect({current_lineups_score, new_score}, label: "Current, New Score")
+        # print(new_state)
         {new_state, new_score}
       else
         {current_lineups, current_lineups_score}
@@ -175,20 +175,17 @@ defmodule Lineups.Search do
     {num_periods, num_players, _num_positions} = Nx.shape(current_lineups)
 
     0..(num_periods - 1)
-    |> Enum.reduce([], fn period, acc ->
-      lineup =
-        0..(num_players - 1)
-        |> Enum.reduce(%{}, fn player, acc ->
-          position_index =
-            current_lineups[period][player]
-            |> Nx.to_flat_list()
-            |> Enum.find_index(&(&1 == 1))
+    |> Enum.map(fn period ->
+      0..(num_players - 1)
+      |> Enum.reduce(%{}, fn player, acc ->
+        position_index =
+          current_lineups[period][player]
+          |> Nx.to_flat_list()
+          |> Enum.find_index(&(&1 == 1))
 
-          position = @positions[position_index]
-          Map.put(acc, @players[player], position)
-        end)
-
-      [acc | lineup]
+        position = @positions[position_index]
+        Map.put(acc, @players[player], position)
+      end)
     end)
   end
 
