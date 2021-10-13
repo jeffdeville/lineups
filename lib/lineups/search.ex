@@ -1,6 +1,6 @@
 defmodule Lineups.Search do
   # if you are wiped out, tiredness = 100%, this is what it what it would subtract from your other ratings.
-  @tiredness_skills Nx.tensor(
+  @tiredness_skill_weights Nx.tensor(
                       [
                         0,
                         0.5,
@@ -8,8 +8,7 @@ defmodule Lineups.Search do
                         5,
                         4.5,
                         1.5
-                      ],
-                      names: [:tiredness_skill_weighting]
+                      ]
                     )
 
   # Used to calculate how tired a player is based on what they've been playing so far.
@@ -23,13 +22,13 @@ defmodule Lineups.Search do
                          # def2
                          [0, 0, 0, 0, 0, 0, 0, 0],
                          # stopper
-                         [-0.6, -0.20, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1],
+                         [0.6, 0.20, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
                          # def_mid
-                         [-0.6, -0.20, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1],
+                         [0.6, 0.20, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
                          # off_mid
-                         [-0.6, -0.20, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1],
+                         [0.6, 0.20, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
                          # fwd
-                         [-0.3, -0.15, 0, 0, 0, 0, 0, 0],
+                         [0.3, 0.15, 0.05, 0.04, 0.03, 0.02, 0.01, 0.01],
                          # sub
                          [0, 0, 0, 0, 0, 0, 0, 0],
                          # sub
@@ -73,7 +72,7 @@ defmodule Lineups.Search do
                               # sub6
                               [0, 0, 0, 0, 0, 0]
                             ],
-                            names: [:position, :skill_weighting]
+                            names: [:position, :skill_weights]
                           )
   @max_skill Nx.broadcast(5, {6})
   @players %{
@@ -159,21 +158,26 @@ defmodule Lineups.Search do
 
   def score(lineups, player_skills), do: score(lineups, player_skills, @position_skill_weights)
 
-  def score_player_position(player_skills, position_skill_weights) do
-    player_position_score =
-          player_skills
-          # |> Nx.transpose()
-          |> Nx.multiply(position_skill_weights)
-          |> Nx.sum(axes: [0])
+  def score_player_position(player_skills, position_skill_weights, tiredness_skill_weights, energy_level) do
+    energy_depletion_percentage = 1.0 - energy_level
+    # Formula:
+    # ([Player Skills] - ([Impact of Tiredness On Each Skill] * Tiredness)) * [Position Skill Weights]
+    player_position_score = player_skills
+    |> Nx.subtract(
+      tiredness_skill_weights
+      |> Nx.multiply(energy_depletion_percentage)
+      |> Nx.multiply(player_skills)
+    )
+    |> Nx.multiply(position_skill_weights)
+    |> Nx.sum(axes: [0])
 
+    max_position_score =
+      position_skill_weights
+      |> Nx.multiply(@max_skill)
+      |> Nx.sum()
+      |> Nx.to_scalar()
 
-        max_position_score =
-          position_skill_weights
-          |> Nx.multiply(@max_skill)
-          |> Nx.sum()
-          |> Nx.to_scalar()
-
-        if max_position_score == 0.0, do: 0.0, else: Nx.divide(player_position_score, max_position_score)
+    if max_position_score == 0.0, do: 0.0, else: Nx.divide(player_position_score, max_position_score)
   end
 
   defp get_position_index(position) do
@@ -184,7 +188,37 @@ defmodule Lineups.Search do
     |> Nx.to_scalar()
   end
 
-  def score(lineups, player_skills, position_skill_weights) do
+  def calculate_energy_level([]), do: 1.0
+  def calculate_energy_level(positions), do: calculate_energy_level(positions, @position_exhaustion)
+
+  def calculate_energy_level([], _), do: 1.0
+  def calculate_energy_level(positions, position_exhaustion) do
+    positions
+    |> Enum.reverse
+    |> Enum.with_index
+    |> Enum.reduce(1, fn({position, periods_ago}, acc) ->
+      # IO.inspect({
+      #   position,
+      #   periods_ago,
+      #   Nx.to_scalar(position_exhaustion[position][periods_ago])
+      # }, label: "Position, Periods Ago, Energy Loss")
+      acc - Nx.to_scalar(position_exhaustion[position][periods_ago])
+    end)
+    |> Float.round(2)
+  end
+
+  defp get_previous_player_positions(_lineups, _player, 0), do: []
+  defp get_previous_player_positions(lineups, player, current_period) do
+    (0..current_period-1)
+    |> Enum.map(fn period ->
+      # IO.inspect(lineups[period][player], label: "Last Position")
+      lineups[period][player] |> get_position_index()
+    end)
+  end
+
+  def score(lineups, player_skills, position_skill_weights), do: score(lineups, player_skills, position_skill_weights, @position_exhaustion)
+
+  def score(lineups, player_skills, position_skill_weights, position_exhaustion) do
     {num_periods, num_players, _} = Nx.shape(lineups)
 
     0..(num_periods-1)
@@ -194,7 +228,9 @@ defmodule Lineups.Search do
       |> Enum.map(fn player ->
         position = lineups[period][player]
         position_index = get_position_index(position)
-        score_player_position(player_skills[player], position_skill_weights[position_index])
+        energy_level = get_previous_player_positions(lineups, player, period) |> calculate_energy_level(position_exhaustion)
+        # IO.inspect({period, player, energy_level}, label: "Period, Player, Energy Level")
+        score_player_position(player_skills[player], position_skill_weights[position_index], @tiredness_skill_weights, energy_level)
       end)
       |> Nx.stack()
       |> Nx.sum()
@@ -204,15 +240,6 @@ defmodule Lineups.Search do
     end)
     |> Float.round(3)
   end
-
-  # # will return a tensor representing the players' current tiredness values to multiply by
-  # def tmp_tiredness(lineups, player_skills, period, player) do
-  #   lineups[period]..0
-  #   |> Enum.map_with_index(fn lineup, index ->
-  #     (@position_tiredness[lineup[player]] * tiredness_fraction_by_recency(index + 1))
-  #     |> Enum.sum()
-  #   end)
-  # end
 
   def evolve(current_lineups) do
     # Get number of periods and kids

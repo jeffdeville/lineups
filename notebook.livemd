@@ -217,11 +217,8 @@ find_position =
 ```
 
 ```elixir
-skills = Nx.tensor([[0, 5, 4, 5, 4, 5]])
-weightings = Nx.tensor([0, 1, 0.3, 1, 1, 1])
-max_score = Nx.broadcast(5, {1, 6})
-player_position_score = Nx.multiply(skills, weightings) |> Nx.sum(axes: [1])
-max_position_score = Nx.multiply(max_score, weightings) |> Nx.sum(axes: [1])
-Nx.divide(player_position_score, max_position_score)
-Nx.iota()
+player_skill = Nx.tensor([0, 5, 4, 5, 4, 5])
+position_skill_weights = Nx.tensor([0, 1, 0.3, 1, 1, 1])
+tiredness_skill_weights = Nx.tensor([0, 0.5, 0.5, 1, 0.95, 0.3])
+tiredness_skill_weights |> Nx.multiply(0.0)
 ```
