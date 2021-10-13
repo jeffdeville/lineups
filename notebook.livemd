@@ -205,35 +205,23 @@ Nx.multiply(Nx.broadcast(player_ratings, game_lineup), game_lineup) |> Nx.sum()
 ## Tweaking
 
 ```elixir
-strong_lineup =
-  Nx.tensor([
-    [
-      # Breccan
-      [0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      # Cameron
-      [1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      # Evan
-      [0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      # Harry
-      [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-      # Isaiah
-      [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
-      # Jack
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-      # Linsana
-      [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
-      # Lusaine
-      [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
-      # Paco
-      [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0],
-      # Richard
-      [0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0],
-      # Ryan
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0],
-      # SamK
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
-      # SamS
-      [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
-    ]
-  ])
+tmp_positions = Nx.eye({4, 4})
+
+find_position =
+  Nx.iota({1, 4})
+  |> Nx.broadcast({4, 4})
+  |> Nx.multiply(tmp_positions)
+  |> Nx.sum(axes: [0])
+
+# valid_check = find_position |> Nx.sum() # should equal the sum of 0, 1, 2, 3, 4...
+```
+
+```elixir
+skills = Nx.tensor([[0, 5, 4, 5, 4, 5]])
+weightings = Nx.tensor([0, 1, 0.3, 1, 1, 1])
+max_score = Nx.broadcast(5, {1, 6})
+player_position_score = Nx.multiply(skills, weightings) |> Nx.sum(axes: [1])
+max_position_score = Nx.multiply(max_score, weightings) |> Nx.sum(axes: [1])
+Nx.divide(player_position_score, max_position_score)
+Nx.iota()
 ```

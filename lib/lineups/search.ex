@@ -1,41 +1,80 @@
 defmodule Lineups.Search do
-  # goalie
-  # defense
-  # offense
-  # speed
-  # endurance
-  # awareness
-  @position_skills Nx.tensor(
-                     [
-                       # goalie
-                       [1, 0, 0, 0, 0, 0],
-                       # def1
-                       [0, 1, 0, 0, 0, 0],
-                       # def2
-                       [0, 1, 0, 0, 0, 0],
-                       # stopper
-                       [0, 1, 0.3, 1, 1, 1],
-                       # def_mid
-                       [0, 1, 0.6, 1, 0.7, 0.4],
-                       # off_mid
-                       [0, 0.4, 1, 1, 1, 0.9],
-                       # fwd
-                       [0, 0, 1, 0.5, 1, 1],
-                       # sub1
-                       [0, 0, 0, 0, 0, 0],
-                       # sub2
-                       [0, 0, 0, 0, 0, 0],
-                       # sub3
-                       [0, 0, 0, 0, 0, 0],
-                       # sub4
-                       [0, 0, 0, 0, 0, 0],
-                       # sub5
-                       [0, 0, 0, 0, 0, 0],
-                       # sub6
-                       [0, 0, 0, 0, 0, 0]
-                     ],
-                     names: [:position, :skill_weighting]
-                   )
+  # if you are wiped out, tiredness = 100%, this is what it what it would subtract from your other ratings.
+  @tiredness_skills Nx.tensor(
+                      [
+                        0,
+                        0.5,
+                        0.5,
+                        5,
+                        4.5,
+                        1.5
+                      ],
+                      names: [:tiredness_skill_weighting]
+                    )
+
+  # Used to calculate how tired a player is based on what they've been playing so far.
+  # So if Breccan was 60% tired from playing stopper, he'd only be 20% tired after a break.
+  @position_exhaustion Nx.tensor([
+                         # Most recent position played --> least recent.
+                         # goalie
+                         [0, 0, 0, 0, 0, 0, 0, 0],
+                         # def1
+                         [0, 0, 0, 0, 0, 0, 0, 0],
+                         # def2
+                         [0, 0, 0, 0, 0, 0, 0, 0],
+                         # stopper
+                         [-0.6, -0.20, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1],
+                         # def_mid
+                         [-0.6, -0.20, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1],
+                         # off_mid
+                         [-0.6, -0.20, -0.1, -0.1, -0.1, -0.1, -0.1, -0.1],
+                         # fwd
+                         [-0.3, -0.15, 0, 0, 0, 0, 0, 0],
+                         # sub
+                         [0, 0, 0, 0, 0, 0, 0, 0],
+                         # sub
+                         [0, 0, 0, 0, 0, 0, 0, 0],
+                         # sub
+                         [0, 0, 0, 0, 0, 0, 0, 0],
+                         # sub
+                         [0, 0, 0, 0, 0, 0, 0, 0],
+                         # sub
+                         [0, 0, 0, 0, 0, 0, 0, 0],
+                         # sub
+                         [0, 0, 0, 0, 0, 0, 0, 0]
+                       ])
+
+  @position_skill_weights Nx.tensor(
+                            [
+                              # goalie
+                              [1, 0, 0, 0, 0, 0],
+                              # def1
+                              [0, 1, 0, 0, 0, 0],
+                              # def2
+                              [0, 1, 0, 0, 0, 0],
+                              # stopper
+                              [0, 1, 0.3, 1, 1, 1],
+                              # def_mid
+                              [0, 1, 0.6, 1, 0.7, 0.4],
+                              # off_mid
+                              [0, 0.4, 1, 1, 1, 0.9],
+                              # fwd
+                              [0, 0, 1, 0.5, 1, 1],
+                              # sub1
+                              [0, 0, 0, 0, 0, 0],
+                              # sub2
+                              [0, 0, 0, 0, 0, 0],
+                              # sub3
+                              [0, 0, 0, 0, 0, 0],
+                              # sub4
+                              [0, 0, 0, 0, 0, 0],
+                              # sub5
+                              [0, 0, 0, 0, 0, 0],
+                              # sub6
+                              [0, 0, 0, 0, 0, 0]
+                            ],
+                            names: [:position, :skill_weighting]
+                          )
   @max_skill Nx.broadcast(5, {6})
   @players %{
     0 => :Breccan,
@@ -99,7 +138,7 @@ defmodule Lineups.Search do
       ) do
     new_state = evolve(current_lineups)
     new_score = score(new_state, player_skills)
-    # IO.inspect({current_lineups_score, new_score}, label: "\tscores")
+
     {best_lineup, best_score} =
       if new_score > current_lineups_score do
         # IO.inspect({current_lineups_score, new_score}, label: "Current, New Score")
@@ -118,28 +157,62 @@ defmodule Lineups.Search do
     )
   end
 
-  def score(lineups, player_skills) do
-    {_num_periods, num_players, _} = Nx.shape(lineups)
-    {_, num_skills} = Nx.shape(@position_skills)
+  def score(lineups, player_skills), do: score(lineups, player_skills, @position_skill_weights)
 
-    # yields a player / position of scores for each player in each position
-    player_ratings =
-      0..(num_players - 1)
+  def score_player_position(player_skills, position_skill_weights) do
+    player_position_score =
+          player_skills
+          # |> Nx.transpose()
+          |> Nx.multiply(position_skill_weights)
+          |> Nx.sum(axes: [0])
+
+
+        max_position_score =
+          position_skill_weights
+          |> Nx.multiply(@max_skill)
+          |> Nx.sum()
+          |> Nx.to_scalar()
+
+        if max_position_score == 0.0, do: 0.0, else: Nx.divide(player_position_score, max_position_score)
+  end
+
+  defp get_position_index(position) do
+    {num_positions} = Nx.shape(position)
+    position
+    |> Nx.multiply(Nx.iota({num_positions}))
+    |> Nx.sum()
+    |> Nx.to_scalar()
+  end
+
+  def score(lineups, player_skills, position_skill_weights) do
+    {num_periods, num_players, _} = Nx.shape(lineups)
+
+    0..(num_periods-1)
+    |> Enum.reduce(0.0, fn period, score ->
+      player_score = 0..(num_players - 1)
       |> Enum.to_list()
-      |> Enum.map(fn position ->
-        player_skills
-        |> Nx.transpose()
-        |> Nx.multiply(
-          Nx.broadcast(@position_skills[position], {num_skills, num_players}, axes: [0])
-        )
-        |> Nx.sum(axes: [0])
-        # |> Nx.divide(@position_skills[position] |> Nx.multiply(@max_skill) |> Nx.sum())
+      |> Enum.map(fn player ->
+        position = lineups[period][player]
+        position_index = get_position_index(position)
+        score_player_position(player_skills[player], position_skill_weights[position_index])
       end)
       |> Nx.stack()
-      |> Nx.transpose()
+      |> Nx.sum()
+      |> Nx.to_scalar()
 
-    Nx.multiply(Nx.broadcast(player_ratings, lineups), lineups) |> Nx.sum() |> Nx.to_scalar()
+      score + player_score
+    end)
+    |> Float.round(3)
   end
+
+  # # will return a tensor representing the players' current tiredness values to multiply by
+  # def tmp_tiredness(lineups, player_skills, period, player) do
+  #   lineups[period]..0
+  #   |> Enum.map_with_index(fn lineup, index ->
+  #     (@position_tiredness[lineup[player]] * tiredness_fraction_by_recency(index + 1))
+  #     |> Enum.sum()
+  #   end)
+  # end
 
   def evolve(current_lineups) do
     # Get number of periods and kids

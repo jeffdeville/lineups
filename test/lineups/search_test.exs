@@ -111,8 +111,9 @@ defmodule Lineups.SearchTest do
     test "when num iterations not completed, search" do
       lineups = Search.init(@player_skills, 2)
       initial_score = Search.score(lineups, @player_skills)
-      new_lineups = Search.search(lineups, initial_score, @player_skills, 50000, 0)
+      new_lineups = Search.search(lineups, initial_score, @player_skills, 2000, 0)
       Search.print(new_lineups)
+      IO.inspect([Search.score(new_lineups, @player_skills), Search.score(lineups, @player_skills)], label: "New Score, Original Score")
       assert Search.score(new_lineups, @player_skills) > Search.score(lineups, @player_skills)
       assert false
     end
@@ -172,54 +173,138 @@ defmodule Lineups.SearchTest do
   end
 
   describe "score" do
-    test "scores correctly" do
-      lineups = Search.init(@player_skills, 3)
-      score = Search.score(lineups, @player_skills)
-      assert score == 7.569902420043945
-    end
+    test "test scoring one player precisely" do
+      skills = Nx.tensor([[0, 5, 4, 5, 4, 5]])
+      weightings = Nx.tensor([[0, 1, 0.3, 1, 1, 1]])
 
-    def make_lineup(stuff) do
       lineup =
-        0..12
-        |> Enum.map(fn player ->
-          player_pos =
-            Enum.find(stuff, fn
-              {^player, position} -> true
-              _ -> false
-            end)
+        Nx.tensor(
+          # lineup
+          [
+            # players
+            [
+              # positions
+              [
+                1
+              ]
+            ]
+          ]
+        )
 
-          if player_pos, do: elem(player_pos, 1), else: @nopos
-        end)
-        |> Nx.stack()
-        |> Nx.broadcast({1, 13, 13})
+      result = Search.score(lineup, skills, weightings)
+      assert result == 0.94
     end
 
-    test "simple choose the better lineup" do
-      stopper = make_lineup([{@breccan, @stopper}])
-      goalie = make_lineup([{@breccan, @goalie}])
-      def1 = make_lineup([{@breccan, @def1}])
+    test "test scoring multiple players precisely" do
+      skills = Nx.tensor([
+        [0, 5, 4, 5, 4, 5],
+        [5, 3, 3, 3, 3, 3],
+      ])
+      weightings = Nx.tensor([
+        [1, 0, 0, 0, 0, 0],
+        [0, 1, 0.3, 1, 1, 1]
+      ])
 
-      stopper_score = Search.score(stopper, @player_skills)
-      goalie_score = Search.score(goalie, @player_skills)
-      def1_score = Search.score(def1, @player_skills)
+      lineup =
+        Nx.tensor(
+          # lineup
+          [
+            # players
+            [
+              # positions
+              [ 0, 1 ], # Breccan is stopper
+              [ 1, 0 ], # Cameron is goalie
+            ]
+          ]
+        )
 
-      assert goalie_score == 0
-      assert def1_score < stopper_score
+      result = Search.score(lineup, skills, weightings)
+      assert result == 1.94
     end
 
-    test "multi-player choose the better lineup" do
-      bad = make_lineup([{@breccan, @stopper}])
-      bad_score = Search.score(bad, @player_skills)
+    test "test scoring multiple players and lineups" do
+      skills = Nx.tensor([
+        [0, 5, 4, 5, 4, 5],
+        [5, 3, 3, 3, 3, 3],
+      ])
+      weightings = Nx.tensor([
+        [1, 0, 0, 0, 0, 0],
+        [0, 1, 0.3, 1, 1, 1]
+      ])
 
-      good =
-        make_lineup([
-          {@breccan, @stopper},
-          {@linsana, @fwd},
-          {@lusaine, @off_mid}
-        ])
+      lineup =
+        Nx.tensor(
+          # lineup
+          [
+            # players
+            [
+              # positions
+              [ 0, 1 ], # Breccan is stopper
+              [ 1, 0 ], # Cameron is goalie
+            ],
+            [
+              # positions
+              [ 1, 0 ], # Breccan is stopper
+              [ 0, 1 ], # Cameron is goalie
+            ]
+          ]
+        )
 
-      good_score = Search.score(good, @player_skills)
-      assert good_score > bad_score
+      result = Search.score(lineup, skills, weightings)
+      assert result == 2.54
     end
+
+    # def make_lineup(position_skills) do
+    #   position_skills
+    #   |> Enum.map(fn {position, skills} ->
+    #     nil
+    #   end)
+    #   |> Nx.stack()
+    # end
+
+    # def make_lineup(player_positions) do
+    #   lineup =
+    #     0..12
+    #     |> Enum.map(fn player ->
+    #       player_pos =
+    #         Enum.find(player_positions, fn
+    #           {^player, position} -> true
+    #           _ -> false
+    #         end)
+
+    #       if player_pos, do: elem(player_pos, 1), else: @nopos
+    #     end)
+    #     |> Nx.stack()
+    #     |> Nx.broadcast({1, 13, 13})
+    # end
+
+    # test "simple choose the better lineup" do
+    #   stopper = make_lineup([{@breccan, @stopper}])
+    #   goalie = make_lineup([{@breccan, @goalie}])
+    #   def1 = make_lineup([{@breccan, @def1}])
+
+    #   stopper_score = Search.score(stopper, @player_skills)
+    #   goalie_score = Search.score(goalie, @player_skills)
+    #   def1_score = Search.score(def1, @player_skills)
+
+    #   assert goalie_score == 0
+    #   assert stopper_score == 0.856
+    #   assert def1_score < stopper_score
+    # end
+
+    # test "multi-player choose the better lineup" do
+    #   bad = make_lineup([{@breccan, @stopper}])
+    #   bad_score = Search.score(bad, @player_skills)
+
+    #   good =
+    #     make_lineup([
+    #       {@breccan, @stopper},
+    #       {@linsana, @fwd},
+    #       {@lusaine, @off_mid}
+    #     ])
+
+    #   good_score = Search.score(good, @player_skills)
+    #   assert good_score > bad_score
+    # end
   end
 end
