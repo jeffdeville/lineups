@@ -2,109 +2,170 @@ defmodule Lineups.ScoringTest do
   use ExUnit.Case, async: true
   alias Lineups.Scoring
 
-  @goalie 0
-  @def1 1
-  @def2 2
-  @stopper 3
-  @def_mid 4
-  @off_mid 5
-  @fwd 6
+  describe "score_player_position" do
+    test "test scoring one player precisely" do
+      player_skill = Nx.tensor([0, 5, 4, 5, 4, 5])
+      position_skill_weights = Nx.tensor([0, 1, 0.3, 1, 1, 1])
+      tiredness_skill_weights = Nx.tensor([0, 0.5, 0.5, 1, 0.95, 0.3])
 
-  describe "invalid lineups score 0" do
-    test "empty lineups score 0" do
-      assert Scoring.score([]) == 0
-    end
+      result =
+        Scoring.score_player_position(
+          player_skill,
+          position_skill_weights,
+          tiredness_skill_weights,
+          1
+        )
+        |> Nx.to_scalar()
+        |> Float.round(3)
 
-    test "incomplete lineups score 0" do
-      assert Scoring.score([[:Breccan, :Harry, :Isaiah]]) == 0
-    end
+      assert result == 0.94
 
-    test "any incomplete lineup scores 0" do
-      assert Scoring.score([
-               [:Breccan, :Harry, :Isaiah, :Cameron, :Paco, :Ryan, :Evan],
-               [:Breccan, :Harry]
-             ]) == 0
-    end
+      result =
+        Scoring.score_player_position(
+          player_skill,
+          position_skill_weights,
+          tiredness_skill_weights,
+          0.8
+        )
+        |> Nx.to_scalar()
+        |> Float.round(3)
 
-    test "lineups with duplicate players scores 0" do
-      assert Scoring.score([
-               [:Breccan, :Breccan, :Breccan, :Breccan, :Breccan, :Breccan, :Breccan]
-             ]) == 0
-    end
-
-    test "lineups with invalid players scores 0" do
-      assert Scoring.score([[:ThisIsNotAPlayer, :Harry, :Isaiah, :Cameron, :Paco, :Ryan, :Evan]]) ==
-               0
+      assert result == 0.815
     end
   end
 
-  describe "valid lineups generate scores" do
-    test "a single lineup is scored properly" do
-      assert Scoring.score([[:Breccan, :Harry, :Isaiah, :Cameron, :Paco, :Ryan, :Evan]]) == 15.351
+  describe "calculate_energy_level" do
+    test "calculates energy level at beginning of game to be 1" do
+      assert Scoring.calculate_energy_level([]) == 1
     end
 
-    test "lineup scores are averaged, so duplicate lineups should have the same score" do
-      lineup1 = [:Breccan, :Harry, :Isaiah, :Cameron, :Paco, :Ryan, :Evan]
-      lineup2 = [:Cameron, :Evan, :Richard, :Breccan, :SamK, :Lusaine, :Linsana]
-      assert Scoring.score([lineup1, lineup1]) == Scoring.score([lineup1])
-      assert Scoring.score([lineup1, lineup2]) == 54.589
-    end
-  end
+    test "calculates energy level in middle of game" do
+      goalie = 0
+      def1 = 1
+      def2 = 2
+      stopper = 3
+      def_mid = 4
+      off_mid = 5
+      fwd = 6
+      bench = 7
 
-  describe "goalie" do
-    test "goalies scoring accounts for skill and how long they've been there" do
-      assert Scoring.get_player_position_score(:Breccan, @goalie, []) == 0
-      assert Scoring.get_player_position_score(:Cameron, @goalie, []) == 5
-      assert Scoring.get_player_position_score(:Cameron, @goalie, [@goalie]) == 5
-      assert Scoring.get_player_position_score(:Cameron, @goalie, [@goalie, @goalie]) == 5
+      assert Scoring.calculate_energy_level([bench]) == 1
+      assert Scoring.calculate_energy_level([bench, bench]) == 1
+      assert Scoring.calculate_energy_level([goalie, goalie]) == 1
+      assert Scoring.calculate_energy_level([stopper]) < 1
 
-      assert Scoring.get_player_position_score(:Cameron, @goalie, [
-               @goalie,
-               @goalie,
-               @goalie,
-               @goalie
-             ]) == 0
-    end
-  end
+      assert Scoring.calculate_energy_level([stopper, bench]) >
+               Scoring.calculate_energy_level([bench, stopper])
 
-  describe "defense" do
-    test "def + desire" do
-      assert Scoring.get_player_position_score(:Breccan, @def1, []) == 0.833
-      assert Scoring.get_player_position_score(:Breccan, @def2, []) == 0.833
-      assert Scoring.get_player_position_score(:Evan, @def1, []) == 0.833
-      assert Scoring.get_player_position_score(:Evan, @def2, []) == 0.833
+      assert Scoring.calculate_energy_level([stopper, stopper]) <
+               Scoring.calculate_energy_level([stopper])
+
+      assert Scoring.calculate_energy_level([stopper, fwd]) == 0.5
+
+      assert Scoring.calculate_energy_level([fwd, fwd, fwd, fwd, fwd]) <
+               Scoring.calculate_energy_level([fwd, fwd, fwd, fwd])
     end
   end
 
-  describe "stopper" do
-    test "def + off + awareness + speed + endurance - tiredness(prev_positions)" do
-      assert Scoring.get_player_position_score(:Breccan, @stopper, []) == 0.898
-      assert Scoring.get_player_position_score(:Ryan, @stopper, []) == 0.382
-      assert Scoring.get_player_position_score(:Linsana, @stopper, []) == 0.956
-    end
-  end
+  describe "score" do
+    test "test scoring one player precisely" do
+      player_skill = Nx.tensor([[0, 5, 4, 5, 4, 5]])
+      position_skill_weights = Nx.tensor([[0, 1, 0.3, 1, 1, 1]])
+      tiredness_skill_weights = Nx.tensor([0, 0.5, 0.5, 5, 4.5, 1.5])
 
-  describe "defensive mid" do
-    test "calculate" do
-      assert Scoring.get_player_position_score(:Breccan, @def_mid, []) == 0.882
-      assert Scoring.get_player_position_score(:Ryan, @def_mid, []) == 0.364
-      assert Scoring.get_player_position_score(:Linsana, @def_mid, []) == 0.949
-    end
-  end
+      lineup =
+        Nx.tensor(
+          # lineup
+          [
+            # players
+            [
+              # positions
+              [
+                1
+              ]
+            ]
+          ]
+        )
 
-  describe "offensive mid" do
-    test "calculate" do
-      assert Scoring.get_player_position_score(:Breccan, @off_mid, []) == 0.867
-      assert Scoring.get_player_position_score(:Ryan, @off_mid, []) == 0.378
-      assert Scoring.get_player_position_score(:Linsana, @off_mid, []) == 0.956
+      result = Scoring.score(lineup, player_skill, position_skill_weights)
+      assert result == 0.94
     end
-  end
 
-  describe "fwd" do
-    test "calculate" do
-      assert Scoring.get_player_position_score(:Breccan, @fwd, []) == 0.818
-      assert Scoring.get_player_position_score(:Ryan, @fwd, []) == 0.455
-      assert Scoring.get_player_position_score(:Linsana, @fwd, []) == 0.909
+    test "test scoring multiple players precisely" do
+      skills =
+        Nx.tensor([
+          [0, 5, 4, 5, 4, 5],
+          [5, 3, 3, 3, 3, 3]
+        ])
+
+      weightings =
+        Nx.tensor([
+          [1, 0, 0, 0, 0, 0],
+          [0, 1, 0.3, 1, 1, 1]
+        ])
+
+      lineup =
+        Nx.tensor(
+          # lineup
+          [
+            # players
+            [
+              # positions
+              # Breccan is stopper
+              [0, 1],
+              # Cameron is goalie
+              [1, 0]
+            ]
+          ]
+        )
+
+      result = Scoring.score(lineup, skills, weightings)
+      assert result == 1.94
+    end
+
+    test "test scoring multiple players and lineups" do
+      skills =
+        Nx.tensor([
+          [0, 5, 4, 5, 4, 5],
+          [5, 3, 3, 3, 3, 3]
+        ])
+
+      weightings =
+        Nx.tensor([
+          [1, 0, 0, 0, 0, 0],
+          [0, 1, 0.3, 1, 1, 1]
+        ])
+
+      position_exhaustion =
+        Nx.tensor([
+          [0, 0, 0, 0, 0, 0, 0, 0],
+          [0.6, 0.20, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        ])
+
+      lineup =
+        Nx.tensor(
+          # lineup
+          [
+            # players
+            [
+              # positions
+              # Breccan is stopper
+              [0, 1],
+              # Cameron is goalie
+              [1, 0]
+            ],
+            [
+              # positions
+              # Breccan is goalie
+              [0, 1],
+              # Cameron is stopper
+              [1, 0]
+            ]
+          ]
+        )
+
+      result = Scoring.score(lineup, skills, weightings, position_exhaustion)
+      assert result < 3.879
     end
   end
 end

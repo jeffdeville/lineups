@@ -1,80 +1,7 @@
 defmodule Lineups.Search do
-  # if you are wiped out, tiredness = 100%, this is what it what it would subtract from your other ratings.
-  @tiredness_skill_weights Nx.tensor(
-                      [
-                        0,
-                        0.5,
-                        0.5,
-                        5,
-                        4.5,
-                        1.5
-                      ]
-                    )
+  alias Lineups.Util
+  alias Lineups.Scoring
 
-  # Used to calculate how tired a player is based on what they've been playing so far.
-  # So if Breccan was 60% tired from playing stopper, he'd only be 20% tired after a break.
-  @position_exhaustion Nx.tensor([
-                         # Most recent position played --> least recent.
-                         # goalie
-                         [0, 0, 0, 0, 0, 0, 0, 0],
-                         # def1
-                         [0, 0, 0, 0, 0, 0, 0, 0],
-                         # def2
-                         [0, 0, 0, 0, 0, 0, 0, 0],
-                         # stopper
-                         [0.6, 0.20, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
-                         # def_mid
-                         [0.6, 0.20, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
-                         # off_mid
-                         [0.6, 0.20, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
-                         # fwd
-                         [0.3, 0.15, 0.05, 0.04, 0.03, 0.02, 0.01, 0.01],
-                         # sub
-                         [0, 0, 0, 0, 0, 0, 0, 0],
-                         # sub
-                         [0, 0, 0, 0, 0, 0, 0, 0],
-                         # sub
-                         [0, 0, 0, 0, 0, 0, 0, 0],
-                         # sub
-                         [0, 0, 0, 0, 0, 0, 0, 0],
-                         # sub
-                         [0, 0, 0, 0, 0, 0, 0, 0],
-                         # sub
-                         [0, 0, 0, 0, 0, 0, 0, 0]
-                       ])
-
-  @position_skill_weights Nx.tensor(
-                            [
-                              # goalie
-                              [1, 0, 0, 0, 0, 0],
-                              # def1
-                              [0, 1, 0, 0, 0, 0],
-                              # def2
-                              [0, 1, 0, 0, 0, 0],
-                              # stopper
-                              [0, 1, 0.3, 1, 1, 1],
-                              # def_mid
-                              [0, 1, 0.6, 1, 0.7, 0.4],
-                              # off_mid
-                              [0, 0.4, 1, 1, 1, 0.9],
-                              # fwd
-                              [0, 0, 1, 0.5, 1, 1],
-                              # sub1
-                              [0, 0, 0, 0, 0, 0],
-                              # sub2
-                              [0, 0, 0, 0, 0, 0],
-                              # sub3
-                              [0, 0, 0, 0, 0, 0],
-                              # sub4
-                              [0, 0, 0, 0, 0, 0],
-                              # sub5
-                              [0, 0, 0, 0, 0, 0],
-                              # sub6
-                              [0, 0, 0, 0, 0, 0]
-                            ],
-                            names: [:position, :skill_weights]
-                          )
-  @max_skill Nx.broadcast(5, {6})
   @players %{
     0 => :Breccan,
     1 => :Cameron,
@@ -117,14 +44,19 @@ defmodule Lineups.Search do
     game_lineup
   end
 
+  def search(current_lineups, current_lineups_score, player_skills, total_iterations) do
+    search(current_lineups, current_lineups_score, player_skills, total_iterations, 0, 0)
+  end
+
   def search(
         current_lineups,
         _current_lineups_score,
         _player_skills,
         total_iterations,
-        current_iteration
+        current_iteration,
+        has_not_moved_in
       )
-      when total_iterations == current_iteration do
+      when total_iterations == current_iteration or has_not_moved_in == 2000 do
     current_lineups
   end
 
@@ -133,18 +65,23 @@ defmodule Lineups.Search do
         current_lineups_score,
         player_skills,
         total_iterations,
-        current_iteration
+        current_iteration,
+        has_not_moved_in
       ) do
     new_state = evolve(current_lineups)
-    new_score = score(new_state, player_skills)
+    new_score = Scoring.score(new_state, player_skills)
 
-    {best_lineup, best_score} =
+    if Integer.mod(current_iteration, 500) == 0 do
+      IO.inspect([current_lineups_score, current_iteration], label: "Current Score")
+    end
+
+    {best_lineup, best_score, has_not_moved_in} =
       if new_score > current_lineups_score do
         # IO.inspect({current_lineups_score, new_score}, label: "Current, New Score")
         # print(new_state)
-        {new_state, new_score}
+        {new_state, new_score, 0}
       else
-        {current_lineups, current_lineups_score}
+        {current_lineups, current_lineups_score, has_not_moved_in + 1}
       end
 
     search(
@@ -152,93 +89,9 @@ defmodule Lineups.Search do
       best_score,
       player_skills,
       total_iterations,
-      current_iteration + 1
+      current_iteration + 1,
+      has_not_moved_in
     )
-  end
-
-  def score(lineups, player_skills), do: score(lineups, player_skills, @position_skill_weights)
-
-  def score_player_position(player_skills, position_skill_weights, tiredness_skill_weights, energy_level) do
-    energy_depletion_percentage = 1.0 - energy_level
-    # Formula:
-    # ([Player Skills] - ([Impact of Tiredness On Each Skill] * Tiredness)) * [Position Skill Weights]
-    player_position_score = player_skills
-    |> Nx.subtract(
-      tiredness_skill_weights
-      |> Nx.multiply(energy_depletion_percentage)
-      |> Nx.multiply(player_skills)
-    )
-    |> Nx.multiply(position_skill_weights)
-    |> Nx.sum(axes: [0])
-
-    max_position_score =
-      position_skill_weights
-      |> Nx.multiply(@max_skill)
-      |> Nx.sum()
-      |> Nx.to_scalar()
-
-    if max_position_score == 0.0, do: 0.0, else: Nx.divide(player_position_score, max_position_score)
-  end
-
-  defp get_position_index(position) do
-    {num_positions} = Nx.shape(position)
-    position
-    |> Nx.multiply(Nx.iota({num_positions}))
-    |> Nx.sum()
-    |> Nx.to_scalar()
-  end
-
-  def calculate_energy_level([]), do: 1.0
-  def calculate_energy_level(positions), do: calculate_energy_level(positions, @position_exhaustion)
-
-  def calculate_energy_level([], _), do: 1.0
-  def calculate_energy_level(positions, position_exhaustion) do
-    positions
-    |> Enum.reverse
-    |> Enum.with_index
-    |> Enum.reduce(1, fn({position, periods_ago}, acc) ->
-      # IO.inspect({
-      #   position,
-      #   periods_ago,
-      #   Nx.to_scalar(position_exhaustion[position][periods_ago])
-      # }, label: "Position, Periods Ago, Energy Loss")
-      acc - Nx.to_scalar(position_exhaustion[position][periods_ago])
-    end)
-    |> Float.round(2)
-  end
-
-  defp get_previous_player_positions(_lineups, _player, 0), do: []
-  defp get_previous_player_positions(lineups, player, current_period) do
-    (0..current_period-1)
-    |> Enum.map(fn period ->
-      # IO.inspect(lineups[period][player], label: "Last Position")
-      lineups[period][player] |> get_position_index()
-    end)
-  end
-
-  def score(lineups, player_skills, position_skill_weights), do: score(lineups, player_skills, position_skill_weights, @position_exhaustion)
-
-  def score(lineups, player_skills, position_skill_weights, position_exhaustion) do
-    {num_periods, num_players, _} = Nx.shape(lineups)
-
-    0..(num_periods-1)
-    |> Enum.reduce(0.0, fn period, score ->
-      player_score = 0..(num_players - 1)
-      |> Enum.to_list()
-      |> Enum.map(fn player ->
-        position = lineups[period][player]
-        position_index = get_position_index(position)
-        energy_level = get_previous_player_positions(lineups, player, period) |> calculate_energy_level(position_exhaustion)
-        # IO.inspect({period, player, energy_level}, label: "Period, Player, Energy Level")
-        score_player_position(player_skills[player], position_skill_weights[position_index], @tiredness_skill_weights, energy_level)
-      end)
-      |> Nx.stack()
-      |> Nx.sum()
-      |> Nx.to_scalar()
-
-      score + player_score
-    end)
-    |> Float.round(3)
   end
 
   def evolve(current_lineups) do
@@ -272,20 +125,13 @@ defmodule Lineups.Search do
   end
 
   def collect_lineups(current_lineups) do
-    {num_periods, num_players, _num_positions} = Nx.shape(current_lineups)
+    {num_periods, num_players, _} = Nx.shape(current_lineups)
 
-    0..(num_periods - 1)
-    |> Enum.map(fn period ->
-      0..(num_players - 1)
-      |> Enum.reduce(%{}, fn player, acc ->
-        position_index =
-          current_lineups[period][player]
-          |> Nx.to_flat_list()
-          |> Enum.find_index(&(&1 == 1))
-
-        position = @positions[position_index]
-        Map.put(acc, @players[player], position)
-      end)
+    0..(num_players - 1)
+    |> Enum.map(fn player ->
+      {@players[player],
+       Util.get_previous_player_positions(current_lineups, player, num_periods)
+       |> Enum.map(&@positions[&1])}
     end)
   end
 

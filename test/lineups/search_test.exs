@@ -1,6 +1,7 @@
 defmodule Lineups.SearchTest do
   use ExUnit.Case, async: true
   alias Lineups.Search
+  alias Lineups.Scoring
 
   @player_skills Nx.tensor([
                    # Breccan
@@ -26,7 +27,7 @@ defmodule Lineups.SearchTest do
                    # Ryan
                    [0, 2, 2, 2, 1, 3],
                    # SamK
-                   [0, 3, 4, 4, 4, 3],
+                   [0, 3, 3, 4, 4, 3],
                    # SamS
                    [0, 2, 3, 4, 5, 2]
                  ])
@@ -103,7 +104,7 @@ defmodule Lineups.SearchTest do
   describe "search" do
     test "when num iterations is reached, return current state" do
       lineups = Search.init(@player_skills, 3)
-      new_lineups = Search.search(lineups, 0, @player_skills, 10, 10)
+      new_lineups = Search.search(lineups, 0, @player_skills, 10)
 
       assert new_lineups == lineups
     end
@@ -111,10 +112,15 @@ defmodule Lineups.SearchTest do
     @tag timeout: :infinity
     test "when num iterations not completed, search" do
       lineups = Search.init(@player_skills, 8)
-      initial_score = Search.score(lineups, @player_skills)
-      new_lineups = Search.search(lineups, initial_score, @player_skills, 10000, 0)
+      initial_score = Scoring.score(lineups, @player_skills)
+      new_lineups = Search.search(lineups, initial_score, @player_skills, 10_000)
       Search.print(new_lineups)
-      IO.inspect([Search.score(new_lineups, @player_skills), Search.score(lineups, @player_skills)], label: "New Score, Original Score")
+
+      IO.inspect(
+        [Search.score(new_lineups, @player_skills), Search.score(lineups, @player_skills)],
+        label: "New Score, Original Score"
+      )
+
       assert Search.score(new_lineups, @player_skills) > Search.score(lineups, @player_skills)
       assert false
     end
@@ -170,132 +176,6 @@ defmodule Lineups.SearchTest do
                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0],
                  [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1]
                ])
-    end
-  end
-
-  describe "score_player_position" do
-    test "test scoring one player precisely" do
-      player_skill = Nx.tensor([0, 5, 4, 5, 4, 5])
-      position_skill_weights = Nx.tensor([0, 1, 0.3, 1, 1, 1])
-      tiredness_skill_weights = Nx.tensor([0, 0.5, 0.5, 1, 0.95, 0.3])
-
-      result = Search.score_player_position(player_skill, position_skill_weights, tiredness_skill_weights, 1) |> Nx.to_scalar() |> Float.round(3)
-      assert result == 0.94
-
-      result = Search.score_player_position(player_skill, position_skill_weights, tiredness_skill_weights, 0.8) |> Nx.to_scalar() |> Float.round(3)
-      assert result == 0.815
-    end
-  end
-
-  describe "calculate_energy_level" do
-    test "calculates energy level at beginning of game to be 1" do
-      assert Search.calculate_energy_level([]) == 1
-    end
-    test "calculates energy level in middle of game" do
-      goalie = 0
-      def1 = 1
-      def2 = 2
-      stopper = 3
-      def_mid = 4
-      off_mid = 5
-      fwd = 6
-      bench = 7
-
-      assert Search.calculate_energy_level([bench]) == 1
-      assert Search.calculate_energy_level([bench, bench]) == 1
-      assert Search.calculate_energy_level([goalie, goalie]) == 1
-      assert Search.calculate_energy_level([stopper]) < 1
-      assert Search.calculate_energy_level([stopper, bench]) > Search.calculate_energy_level([bench, stopper])
-      assert Search.calculate_energy_level([stopper, stopper]) < Search.calculate_energy_level([stopper])
-      assert Search.calculate_energy_level([stopper, fwd ]) == 0.5
-      assert Search.calculate_energy_level([fwd, fwd, fwd, fwd, fwd ]) < Search.calculate_energy_level([fwd, fwd, fwd, fwd ])
-    end
-  end
-  describe "score" do
-    test "test scoring one player precisely" do
-      player_skill = Nx.tensor([[0, 5, 4, 5, 4, 5]])
-      position_skill_weights = Nx.tensor([[0, 1, 0.3, 1, 1, 1]])
-      tiredness_skill_weights = Nx.tensor([0, 0.5, 0.5, 5, 4.5, 1.5])
-
-      lineup =
-        Nx.tensor(
-          # lineup
-          [
-            # players
-            [
-              # positions
-              [
-                1
-              ]
-            ]
-          ]
-        )
-
-      result = Search.score(lineup, player_skill, position_skill_weights)
-      assert result == 0.94
-    end
-
-    test "test scoring multiple players precisely" do
-      skills = Nx.tensor([
-        [0, 5, 4, 5, 4, 5],
-        [5, 3, 3, 3, 3, 3],
-      ])
-      weightings = Nx.tensor([
-        [1, 0, 0, 0, 0, 0],
-        [0, 1, 0.3, 1, 1, 1]
-      ])
-
-      lineup =
-        Nx.tensor(
-          # lineup
-          [
-            # players
-            [
-              # positions
-              [ 0, 1 ], # Breccan is stopper
-              [ 1, 0 ], # Cameron is goalie
-            ]
-          ]
-        )
-
-      result = Search.score(lineup, skills, weightings)
-      assert result == 1.94
-    end
-
-    test "test scoring multiple players and lineups" do
-      skills = Nx.tensor([
-        [0, 5, 4, 5, 4, 5],
-        [5, 3, 3, 3, 3, 3],
-      ])
-      weightings = Nx.tensor([
-        [1, 0, 0, 0, 0, 0],
-        [0, 1, 0.3, 1, 1, 1]
-      ])
-      position_exhaustion = Nx.tensor([
-        [0, 0, 0, 0, 0, 0, 0, 0],
-        [0.6, 0.20, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
-      ])
-
-      lineup =
-        Nx.tensor(
-          # lineup
-          [
-            # players
-            [
-              # positions
-              [ 0, 1 ], # Breccan is stopper
-              [ 1, 0 ], # Cameron is goalie
-            ],
-            [
-              # positions
-              [ 0, 1 ], # Breccan is goalie
-              [ 1, 0 ], # Cameron is stopper
-            ]
-          ]
-        )
-
-      result = Search.score(lineup, skills, weightings, position_exhaustion)
-      assert result < 3.879
     end
   end
 end

@@ -1,180 +1,192 @@
 defmodule Lineups.Scoring do
-  @num_players_on_field 7
+  alias Lineups.Util
 
-  # positions
-  @goalie 0
-  @def1 1
-  @def2 2
-  @stopper 3
-  @def_mid 4
-  @off_mid 5
-  @fwd 6
+  # if you are wiped out, tiredness = 100%, this is what it what it would subtract from your other ratings.
+  @tiredness_skill_weights Nx.tensor([
+                             0,
+                             0.5,
+                             0.5,
+                             5,
+                             4.5,
+                             1.5
+                           ])
 
-  # skill indices
-  @goalie_skill 0
-  @def 1
-  @off 2
-  @endurance 3
-  @speed 4
-  @awareness 5
+  # Used to calculate how tired a player is based on what they've been playing so far.
+  # So if Breccan was 60% tired from playing stopper, he'd only be 20% tired after a break.
+  @position_exhaustion Nx.tensor([
+                         # Most recent position played --> least recent.
+                         # goalie
+                         [0, 0, 0, 0, 0, 0, 0, 0],
+                         # def1
+                         [0, 0, 0, 0, 0, 0, 0, 0],
+                         # def2
+                         [0, 0, 0, 0, 0, 0, 0, 0],
+                         # stopper
+                         [0.6, 0.20, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+                         # def_mid
+                         [0.6, 0.20, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+                         # off_mid
+                         [0.6, 0.20, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+                         # fwd
+                         [0.3, 0.15, 0.05, 0.04, 0.03, 0.02, 0.01, 0.01],
+                         # sub
+                         [0, 0, 0, 0, 0, 0, 0, 0],
+                         # sub
+                         [0, 0, 0, 0, 0, 0, 0, 0],
+                         # sub
+                         [0, 0, 0, 0, 0, 0, 0, 0],
+                         # sub
+                         [0, 0, 0, 0, 0, 0, 0, 0],
+                         # sub
+                         [0, 0, 0, 0, 0, 0, 0, 0],
+                         # sub
+                         [0, 0, 0, 0, 0, 0, 0, 0]
+                       ])
 
-  @player_skills %{
-    Breccan: [0, 5, 4, 5, 4, 5],
-    Cameron: [5, 3, 3, 3, 3, 3],
-    Evan: [4, 4, 4, 2, 2, 4],
-    Harry: [3, 4, 3, 4, 3, 2],
-    Isaiah: [0, 4, 3, 4, 4, 3],
-    Jack: [4, 5, 4, 3, 3, 4],
-    Linsana: [0, 5, 5, 5, 5, 5],
-    Lusaine: [0, 5, 5, 5, 5, 5],
-    Paco: [0, 3, 3, 5, 3, 3],
-    Richard: [0, 2, 1, 2, 1, 1],
-    Ryan: [0, 2, 2, 2, 1, 3],
-    SamK: [0, 3, 4, 4, 4, 3],
-    SamS: [0, 2, 3, 4, 5, 2]
-  }
+  @position_skill_weights Nx.tensor(
+                            [
+                              # goalie
+                              [1, 0, 0, 0, 0, 0],
+                              # def1
+                              [0, 1, 0, 0, 0, 0],
+                              # def2
+                              [0, 1, 0, 0, 0, 0],
+                              # stopper
+                              [0, 1, 0.3, 1, 1, 1],
+                              # def_mid
+                              [0, 1, 0.6, 1, 0.7, 0.4],
+                              # off_mid
+                              [0, 0.4, 1, 1, 1, 0.9],
+                              # fwd
+                              [0, 0, 1, 0.5, 1, 1],
+                              # sub1
+                              [0, 0, 0, 0, 0, 0],
+                              # sub2
+                              [0, 0, 0, 0, 0, 0],
+                              # sub3
+                              [0, 0, 0, 0, 0, 0],
+                              # sub4
+                              [0, 0, 0, 0, 0, 0],
+                              # sub5
+                              [0, 0, 0, 0, 0, 0],
+                              # sub6
+                              [0, 0, 0, 0, 0, 0]
+                            ],
+                            names: [:position, :skill_weights]
+                          )
+  @max_skill Nx.broadcast(5, {6})
 
-  @max_defense 5
-  @max_offense 5
-  @max_awareness 5
-  @max_speed 5
-  @max_desire 1
-  @max_freshness 5
+  def score_player_position(
+        player_skills,
+        position_skill_weights,
+        tiredness_skill_weights,
+        energy_level
+      ) do
+    energy_depletion_percentage = 1.0 - energy_level
+    # Formula:
+    # ([Player Skills] - ([Impact of Tiredness On Each Skill] * Tiredness)) * [Position Skill Weights]
+    player_position_score =
+      player_skills
+      |> Nx.subtract(
+        tiredness_skill_weights
+        |> Nx.multiply(energy_depletion_percentage)
+        |> Nx.multiply(player_skills)
+      )
+      |> Nx.multiply(position_skill_weights)
+      |> Nx.sum(axes: [0])
 
-  @spec score(list(list(atom()))) :: any
-  def score([]), do: 0
+    max_position_score =
+      position_skill_weights
+      |> Nx.multiply(@max_skill)
+      |> Nx.sum()
+      |> Nx.to_scalar()
 
-  def score(lineups) do
-    if any_invalid_lineups?(lineups) do
-      0
-    else
-      lineups
-      |> Enum.reduce(0, fn lineup, acc -> acc + score_lineup(lineup) + score_defense(lineup) end)
-      |> average_score(lineups)
-    end
+    if max_position_score == 0.0,
+      do: 0.0,
+      else: Nx.divide(player_position_score, max_position_score)
   end
 
-  defp score_lineup(lineup) do
-    # a Lineup is just an list of players, their position inferred by index
-    lineup
-    |> Stream.with_index(0)
-    |> Enum.map(fn {player, index} -> get_player_position_score(player, index) end)
-    |> Enum.reduce(0, fn score, acc -> acc + score end)
-    |> :math.pow(2)
-  end
+  def calculate_energy_level([]), do: 1.0
 
-  defp score_defense(lineup) do
-    [_, def1, def2 | _tail] = lineup
-    :math.pow(get_player_position_score(def1, 1) + get_player_position_score(def2, 2), 2)
-  end
+  def calculate_energy_level(positions),
+    do: calculate_energy_level(positions, @position_exhaustion)
 
-  defp average_score(total_score, lineups), do: (total_score / length(lineups)) |> Float.round(3)
+  def calculate_energy_level([], _), do: 1.0
 
-  defp any_invalid_lineups?(lineups) do
-    lineups
-    |> Enum.any?(fn lineup ->
-      any_duplicate_players_or_incomplete_lineups?(lineup) or any_missing_players?(lineup)
+  def calculate_energy_level(positions, position_exhaustion) do
+    positions
+    |> Enum.reverse()
+    |> Enum.with_index()
+    |> Enum.reduce(1, fn {position, periods_ago}, acc ->
+      # IO.inspect({
+      #   position,
+      #   periods_ago,
+      #   Nx.to_scalar(position_exhaustion[position][periods_ago])
+      # }, label: "Position, Periods Ago, Energy Loss")
+      acc - Nx.to_scalar(position_exhaustion[position][periods_ago])
     end)
+    |> Float.round(2)
   end
 
-  defp any_missing_players?(lineup) do
-    if Enum.any?(lineup, fn player -> !Map.has_key?(@player_skills, player) end) do
-      IO.inspect(lineup, label: "Missing players")
-      true
-    else
-      false
-    end
+  def calculate_playing_time_penalty(lineups) do
+    {num_periods, num_players, _} = Nx.shape(lineups)
+
+    # get the positions for each player in order over the entire lineup
+    num_violations =
+      0..(num_players - 1)
+      |> Enum.map(fn player ->
+        Util.get_previous_player_positions(lineups, player, num_periods)
+      end)
+      # iterate in pairs, looking for where 2 positions in a row are subs,
+      |> Enum.map(fn positions ->
+        positions
+        |> Enum.chunk_every(2, 1, :discard)
+        |> Enum.reduce(0, fn [p1, p2], acc ->
+          if p1 > 6 and p2 > 6, do: acc + 1, else: acc
+        end)
+      end)
+      |> Enum.sum()
+
+    num_violations * 0.5
   end
 
-  defp any_duplicate_players_or_incomplete_lineups?(lineup) do
-    if MapSet.size(MapSet.new(lineup)) != @num_players_on_field do
-      IO.inspect(lineup, label: "duplicate or incomplete lineup")
-      true
-    else
-      false
-    end
-  end
+  def score(lineups, player_skills), do: score(lineups, player_skills, @position_skill_weights)
 
-  def get_player_position_score(player, position),
-    do: get_player_position_score(player, position, [])
+  def score(lineups, player_skills, position_skill_weights),
+    do: score(lineups, player_skills, position_skill_weights, @position_exhaustion)
 
-  def get_player_position_score(player, @goalie, prev_positions) do
-    num_times_in_goal_so_far =
-      prev_positions
-      |> Enum.filter(&(&1 == @goalie))
-      |> Kernel.length()
+  def score(lineups, player_skills, position_skill_weights, position_exhaustion) do
+    {num_periods, num_players, _} = Nx.shape(lineups)
 
-    if num_times_in_goal_so_far >= 4, do: 0, else: goalie(player)
-  end
+    0..(num_periods - 1)
+    |> Enum.reduce(0.0, fn period, score ->
+      player_score =
+        0..(num_players - 1)
+        |> Enum.to_list()
+        |> Enum.map(fn player ->
+          position = lineups[period][player]
+          position_index = Util.get_position_index(position)
+          previous_positions = Util.get_previous_player_positions(lineups, player, period)
+          energy_level = previous_positions |> calculate_energy_level(position_exhaustion)
 
-  def get_player_position_score(player, position, prev_positions)
-      when position == @def1 or position == @def2 do
-    ((defense(player) + desire(player, @def, prev_positions)) / (@max_defense + @max_desire))
+          score_player_position(
+            player_skills[player],
+            position_skill_weights[position_index],
+            @tiredness_skill_weights,
+            energy_level
+          )
+
+          # IO.inspect({period, player, energy_level}, label: "Period, Player, Energy Level")
+          # was_previously_benched_penalty = if position_index > 6, do: -0.3, else: 0.0
+          # Nx.add(player_rating, was_previously_benched_penalty)
+        end)
+        |> Nx.stack()
+        |> Nx.sum()
+        |> Nx.to_scalar()
+
+      score + player_score
+    end)
     |> Float.round(3)
+    |> Kernel.-(calculate_playing_time_penalty(lineups))
   end
-
-  def get_player_position_score(player, @stopper, prev_positions) do
-    ((defense(player) +
-        offense(player) * 0.3 +
-        awareness(player) +
-        speed(player) +
-        desire(player, @stopper, prev_positions) +
-        freshness(player, @stopper, prev_positions)) /
-       (@max_defense + @max_offense * 0.3 + @max_awareness + @max_speed + @max_desire +
-          @max_freshness))
-    |> Float.round(3)
-  end
-
-  def get_player_position_score(player, @def_mid, prev_positions) do
-    ((defense(player) +
-        offense(player) * 0.6 +
-        awareness(player) * 0.4 +
-        speed(player) * 0.7 +
-        desire(player, @def_mid, prev_positions) +
-        freshness(player, @def_mid, prev_positions)) /
-       (@max_defense + @max_offense * 0.6 + @max_awareness * 0.4 + @max_speed * 0.7 + @max_desire +
-          @max_freshness))
-    |> Float.round(3)
-  end
-
-  def get_player_position_score(player, @off_mid, prev_positions) do
-    ((defense(player) * 0.4 +
-        offense(player) +
-        awareness(player) * 0.9 +
-        speed(player) +
-        desire(player, @off_mid, prev_positions) +
-        freshness(player, @def_mid, prev_positions)) /
-       (@max_defense * 0.4 + @max_offense + @max_awareness * 0.9 + @max_speed + @max_desire +
-          @max_freshness))
-    |> Float.round(3)
-  end
-
-  def get_player_position_score(player, @fwd, prev_positions) do
-    ((offense(player) + awareness(player) + endurance(player) * 0.5 + speed(player) +
-        desire(player, @fwd, prev_positions)) / (@max_offense + @max_awareness + @max_desire))
-    |> Float.round(3)
-  end
-
-  defp desire(:Paco, position, prev_positions) when position == @off_mid or position == @fwd do
-    times_played_offense =
-      prev_positions
-      |> Enum.filter(&(&1 == @off_mid or &1 == @fwd))
-      |> Kernel.length()
-
-    if times_played_offense > 2, do: 2, else: 1
-  end
-
-  defp desire(:Evan, position, _prev_positions) when position in [@def1, @def2], do: 1
-  defp desire(_player, _position, _prev_positions), do: 0
-
-  def freshness(player, _position, _prev_positions) do
-    endurance(player)
-  end
-
-  defp goalie(player), do: Enum.at(@player_skills[player], @goalie_skill)
-  defp defense(player), do: Enum.at(@player_skills[player], @def)
-  defp offense(player), do: Enum.at(@player_skills[player], @off)
-  defp awareness(player), do: Enum.at(@player_skills[player], @awareness)
-  defp endurance(player), do: Enum.at(@player_skills[player], @endurance)
-  defp speed(player), do: Enum.at(@player_skills[player], @speed)
 end
